@@ -23,30 +23,32 @@ if 'last_request_time' not in st.session_state:
 if 'request_count' not in st.session_state:
     st.session_state.request_count = 0
 
-# Find a working model with better free tier limits (prioritizing gemini-1.5-flash)
+# Find a working model - Gemini 2.0 and 2.5 are now the standard
 try:
     st.info("🔍 Initializing AI model...")
     available_models = genai.list_models()
     model = None
     
-    # Prioritize models in order of free tier quota availability
+    # Updated model list - Gemini 2.0 and 2.5 are the current available models
     preferred_models = [
-        "gemini-1.5-flash",      # Best free tier limits
-        "gemini-1.5-pro",        # Good but more limited
-        "gemini-2.0-flash-lite", # Lite version with good quotas
-        "gemini-pro",            # Older but stable
+        "gemini-2.0-flash",           # Fast, efficient, widely available
+        "gemini-2.0-flash-lite",      # Lightweight version
+        "gemini-2.5-flash",           # Latest flash model
+        "gemini-2.5-pro",             # Most capable (may have lower rate limits)
+        "gemini-flash-latest",        # Auto-selects latest flash model
+        "gemini-pro",                 # Legacy fallback
     ]
     
     for preferred in preferred_models:
         for m in available_models:
             if preferred in m.name and "generateContent" in m.supported_generation_methods:
                 model = genai.GenerativeModel(m.name)
-                st.success(f"✨ Using model: {m.name} (optimized for free tier)")
+                st.success(f"✨ Using model: {m.name}")
                 break
         if model:
             break
     
-    # If no preferred model found, take any available
+    # If no preferred model found, take any available generateContent model
     if model is None:
         for m in available_models:
             if "generateContent" in m.supported_generation_methods:
@@ -56,12 +58,18 @@ try:
     
     if model is None:
         st.error("❌ No suitable text generation models found for your account.")
-        st.info("Please verify your API key is valid and has Gemini API access enabled.")
+        st.info("""
+        **Troubleshooting steps:**
+        1. Verify your API key is valid in [Google AI Studio](https://aistudio.google.com/)
+        2. Make sure the Generative Language API is enabled in [Google Cloud Console](https://console.cloud.google.com/)
+        3. Try creating a new API key
+        4. Check that billing is enabled (free tier still requires billing setup)
+        """)
         st.stop()
         
 except Exception as e:
     st.error(f"❌ Failed to initialize model: {str(e)}")
-    st.info("This might be an account issue. Try creating a new API key in Google AI Studio.")
+    st.info("Try creating a new API key in Google AI Studio - new keys automatically have access to Gemini 2.0+ models.")
     st.stop()
 
 # Header section
@@ -147,9 +155,21 @@ if st.button("ASK", use_container_width=400):
             error_msg = str(e)
             if "429" in error_msg or "quota" in error_msg.lower():
                 st.error("⚠️ Rate limit exceeded. Please wait 1-2 minutes before trying again.")
-                st.info("Free tier tip: Try using gemini-1.5-flash which has better free quotas, or wait for quota reset at midnight Pacific Time.")
+                st.info("Free tier limits reset at midnight Pacific Time.")
+            elif "404" in error_msg:
+                st.error("❌ Model not found error.")
+                st.info("""
+                **Quick fix:** Your API key may not have access to the newer models yet.
+                
+                1. Go to [Google AI Studio](https://aistudio.google.com/)
+                2. Create a **brand new API key**
+                3. Update the key in your Streamlit Secrets
+                4. Redeploy your app
+                
+                New API keys automatically have access to Gemini 2.0+ models.
+                """)
             else:
-                st.error(f"Error generating response: {error_msg}")
+                st.error(f"Error: {error_msg}")
             # Reset last request time on error to allow retry
             st.session_state.last_request_time = None
     else:
