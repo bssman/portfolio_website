@@ -6,6 +6,8 @@
 
 import streamlit as st
 import google.generativeai as genai
+import time
+from datetime import datetime
 
 # Configure API key from Streamlit secrets
 try:
@@ -15,29 +17,36 @@ except Exception as e:
     st.error("⚠️ API Configuration Error. Please check your API key in Streamlit Secrets.")
     st.stop()
 
-# Find a working model automatically (fixes the 404 error)
+# Initialize session state for rate limiting
+if 'last_request_time' not in st.session_state:
+    st.session_state.last_request_time = None
+if 'request_count' not in st.session_state:
+    st.session_state.request_count = 0
+
+# Find a working model with better free tier limits (prioritizing gemini-1.5-flash)
 try:
     st.info("🔍 Initializing AI model...")
     available_models = genai.list_models()
     model = None
     
-    for m in available_models:
-        if "generateContent" in m.supported_generation_methods:
-            # Prefer gemini-2.0-flash or gemini-1.5-flash if available
-            if "gemini-2.0-flash" in m.name:
-                model = genai.GenerativeModel(m.name)
-                st.success(f"✨ Using model: {m.name}")
-                break
-            elif "gemini-1.5-flash" in m.name:
-                model = genai.GenerativeModel(m.name)
-                st.success(f"✨ Using model: {m.name}")
-                break
-            elif "gemini-pro" in m.name:
-                model = genai.GenerativeModel(m.name)
-                st.success(f"✨ Using model: {m.name}")
-                break
+    # Prioritize models in order of free tier quota availability
+    preferred_models = [
+        "gemini-1.5-flash",      # Best free tier limits
+        "gemini-1.5-pro",        # Good but more limited
+        "gemini-2.0-flash-lite", # Lite version with good quotas
+        "gemini-pro",            # Older but stable
+    ]
     
-    # If no preferred model found, take the first available
+    for preferred in preferred_models:
+        for m in available_models:
+            if preferred in m.name and "generateContent" in m.supported_generation_methods:
+                model = genai.GenerativeModel(m.name)
+                st.success(f"✨ Using model: {m.name} (optimized for free tier)")
+                break
+        if model:
+            break
+    
+    # If no preferred model found, take any available
     if model is None:
         for m in available_models:
             if "generateContent" in m.supported_generation_methods:
@@ -93,12 +102,26 @@ persona = """
 
 st.title("🤖 CodeNrobots Chat Bot")
 
+# Display rate limit info
+st.caption("💡 Free tier tip: Please wait 30 seconds between questions to avoid rate limits")
+
 user_question = st.text_input("Ask anything about me")
 
 if st.button("ASK", use_container_width=400):
     if user_question:
+        # Rate limiting check
+        now = datetime.now()
+        if st.session_state.last_request_time:
+            time_diff = (now - st.session_state.last_request_time).total_seconds()
+            if time_diff < 30:  # Wait 30 seconds between requests
+                st.warning(f"⏰ Please wait {30 - int(time_diff)} seconds before asking another question (rate limit)")
+                st.stop()
+        
         try:
             with st.spinner("🤔 Thinking..."):
+                st.session_state.last_request_time = now
+                st.session_state.request_count += 1
+                
                 prompt = persona + " Here is the question that the user asked: " + user_question
                 
                 # Add safety settings to prevent blocking
@@ -116,12 +139,19 @@ if st.button("ASK", use_container_width=400):
                 
                 if response and response.text:
                     st.write(response.text)
+                    st.caption(f"📊 Request #{st.session_state.request_count} | Model: {model.model_name}")
                 else:
                     st.warning("I couldn't generate a response. Please try asking differently.")
                     
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            st.info("Please check your API key and ensure the Gemini API is enabled.")
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower():
+                st.error("⚠️ Rate limit exceeded. Please wait 1-2 minutes before trying again.")
+                st.info("Free tier tip: Try using gemini-1.5-flash which has better free quotas, or wait for quota reset at midnight Pacific Time.")
+            else:
+                st.error(f"Error generating response: {error_msg}")
+            # Reset last request time on error to allow retry
+            st.session_state.last_request_time = None
     else:
         st.warning("Please ask a question first!")
 
