@@ -1,5 +1,8 @@
 # how to run
 # streamlit run portfolio_website.py
+# run at terminal
+# https://ai.google.dev/gemini-api/docs/quickstart?lang=python
+# pip install -q -U google-generativeai
 
 import streamlit as st
 import google.generativeai as genai
@@ -8,18 +11,48 @@ import google.generativeai as genai
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    
-    # Try different model names
-    try:
-        model = genai.GenerativeModel('gemini-pro')
-    except:
-        try:
-            model = genai.GenerativeModel('gemini-1.5-pro')
-        except:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
 except Exception as e:
-    st.error(f"API Configuration Error: Please check your API key in secrets.toml")
+    st.error("⚠️ API Configuration Error. Please check your API key in Streamlit Secrets.")
+    st.stop()
+
+# Find a working model automatically (fixes the 404 error)
+try:
+    st.info("🔍 Initializing AI model...")
+    available_models = genai.list_models()
+    model = None
+    
+    for m in available_models:
+        if "generateContent" in m.supported_generation_methods:
+            # Prefer gemini-2.0-flash or gemini-1.5-flash if available
+            if "gemini-2.0-flash" in m.name:
+                model = genai.GenerativeModel(m.name)
+                st.success(f"✨ Using model: {m.name}")
+                break
+            elif "gemini-1.5-flash" in m.name:
+                model = genai.GenerativeModel(m.name)
+                st.success(f"✨ Using model: {m.name}")
+                break
+            elif "gemini-pro" in m.name:
+                model = genai.GenerativeModel(m.name)
+                st.success(f"✨ Using model: {m.name}")
+                break
+    
+    # If no preferred model found, take the first available
+    if model is None:
+        for m in available_models:
+            if "generateContent" in m.supported_generation_methods:
+                model = genai.GenerativeModel(m.name)
+                st.info(f"📱 Using model: {m.name}")
+                break
+    
+    if model is None:
+        st.error("❌ No suitable text generation models found for your account.")
+        st.info("Please verify your API key is valid and has Gemini API access enabled.")
+        st.stop()
+        
+except Exception as e:
+    st.error(f"❌ Failed to initialize model: {str(e)}")
+    st.info("This might be an account issue. Try creating a new API key in Google AI Studio.")
     st.stop()
 
 # Header section
@@ -58,7 +91,7 @@ persona = """
         CodeNrobots's Github: https://github.com/CodeNrobotshassan
         """
 
-st.title("CodeNrobots Chat Bot")
+st.title("🤖 CodeNrobots Chat Bot")
 
 user_question = st.text_input("Ask anything about me")
 
@@ -68,27 +101,27 @@ if st.button("ASK", use_container_width=400):
             with st.spinner("🤔 Thinking..."):
                 prompt = persona + " Here is the question that the user asked: " + user_question
                 
-                # Add safety settings
-                safety_settings = [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                ]
+                # Add safety settings to prevent blocking
+                safety_settings = {
+                    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE", 
+                    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+                }
                 
                 response = model.generate_content(
                     prompt,
                     safety_settings=safety_settings
                 )
                 
-                if response.text:
+                if response and response.text:
                     st.write(response.text)
                 else:
-                    st.warning("I couldn't generate a response. Please try again.")
+                    st.warning("I couldn't generate a response. Please try asking differently.")
                     
         except Exception as e:
-            st.error(f"Error: {str(e)}")
-            st.info("Please make sure your API key is valid and you have enabled the Gemini API in Google AI Studio.")
+            st.error(f"Error generating response: {str(e)}")
+            st.info("Please check your API key and ensure the Gemini API is enabled.")
     else:
         st.warning("Please ask a question first!")
 
@@ -97,25 +130,32 @@ st.title("")
 # YouTube section
 col1, col2 = st.columns(2)
 with col1:
-    st.subheader("YouTube Channel")
-    st.write("Knowledge channel")
+    st.subheader("📺 YouTube Channel")
+    st.write("Knowledge channel - Learn Computer Vision and Robotics")
     st.markdown("[Subscribe on YouTube](https://www.youtube.com/channel/UCYUjYU5FveRAscQ8V21w81A)")
 
 with col2:
     st.video("https://youtu.be/bxuYDT-BWaI")
 
 st.title("")
-st.title("My Setup")
+st.title("🖥️ My Setup")
 st.image("images/setup.jpg")
 
 st.write("")
-st.title("My Skills")
-st.slider("Programming", 0, 100, 70)
-st.slider("Teaching", 0, 100, 80)
-st.slider("Robotics", 0, 100, 75)
+st.title("📊 My Skills")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Programming", "70%")
+    st.progress(70)
+with col2:
+    st.metric("Teaching", "80%")
+    st.progress(80)
+with col3:
+    st.metric("Robotics", "75%")
+    st.progress(75)
 
 st.write("")
-st.title("My Gallery")
+st.title("🖼️ My Gallery")
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -132,6 +172,12 @@ with col3:
     st.image("images/g9.jpg")
 
 st.write("")
-st.write("CONTACT")
+st.write("---")
+st.write("📞 CONTACT")
 st.title("For Enquiries")
-st.write("📧 contact@CodeNrobotshassan.com")
+st.write("📧 **Email:** contact@CodeNrobotshassan.com")
+st.write("🔗 **Links:** [YouTube](https://www.youtube.com/channel/UCYUjYU5FveRAscQ8V21w81A) | [GitHub](https://github.com/CodeNrobotshassan) | [LinkedIn](https://www.linkedin.com/in/CodeNrobots-hassan-8045b38a/) | [Instagram](https://www.instagram.com/CodeNrobotssworkshop/)")
+
+# Footer
+st.write("---")
+st.caption("© 2024 CodeNrobots. All rights reserved.")
