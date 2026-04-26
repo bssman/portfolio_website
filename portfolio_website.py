@@ -1,8 +1,5 @@
 # how to run
 # streamlit run portfolio_website.py
-# run at terminal
-# https://ai.google.dev/gemini-api/docs/quickstart?lang=python
-# pip install -q -U google-generativeai
 
 import streamlit as st
 import google.generativeai as genai
@@ -11,12 +8,21 @@ import google.generativeai as genai
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Try different model names
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+    except:
+        try:
+            model = genai.GenerativeModel('gemini-1.5-pro')
+        except:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
 except Exception as e:
-    st.error("Please set up your Google API key in .streamlit/secrets.toml")
+    st.error(f"API Configuration Error: Please check your API key in secrets.toml")
     st.stop()
 
-# Rest of your code continues here...
+# Header section
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Hi :wave:")
@@ -55,12 +61,34 @@ persona = """
 st.title("CodeNrobots Chat Bot")
 
 user_question = st.text_input("Ask anything about me")
+
 if st.button("ASK", use_container_width=400):
     if user_question:
-        with st.spinner("Thinking..."):
-            prompt = persona + " Here is the question that the user asked: " + user_question
-            response = model.generate_content(prompt)
-            st.write(response.text)
+        try:
+            with st.spinner("🤔 Thinking..."):
+                prompt = persona + " Here is the question that the user asked: " + user_question
+                
+                # Add safety settings
+                safety_settings = [
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                ]
+                
+                response = model.generate_content(
+                    prompt,
+                    safety_settings=safety_settings
+                )
+                
+                if response.text:
+                    st.write(response.text)
+                else:
+                    st.warning("I couldn't generate a response. Please try again.")
+                    
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+            st.info("Please make sure your API key is valid and you have enabled the Gemini API in Google AI Studio.")
     else:
         st.warning("Please ask a question first!")
 
@@ -71,6 +99,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("YouTube Channel")
     st.write("Knowledge channel")
+    st.markdown("[Subscribe on YouTube](https://www.youtube.com/channel/UCYUjYU5FveRAscQ8V21w81A)")
 
 with col2:
     st.video("https://youtu.be/bxuYDT-BWaI")
@@ -105,4 +134,4 @@ with col3:
 st.write("")
 st.write("CONTACT")
 st.title("For Enquiries")
-st.write("email: contact@CodeNrobotshassan.com")
+st.write("📧 contact@CodeNrobotshassan.com")
